@@ -1,0 +1,101 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Professional Base Styles */
+@layer base {
+  * {
+    @apply border-neutral-200;
+  }
+  
+  body {
+    @apply bg-white text-neutral-900;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+/* Professional Component Styles */
+@layer components {
+  .glass-effect {
+    @apply bg-white/80 backdrop-blur-md border border-white/20;
+  }
+  
+  .gradient-gold {
+    background: linear-gradient(135deg, #D4AF37 0%, #B8941F 100%);
+  }
+  
+  .gradient-primary {
+    background: linear-gradient(135deg, #D4AF37 0%, #D2691E 100%);
+  }
+  
+  .text-gradient {
+    background: linear-gradient(135deg, #D4AF37 0%, #D2691E 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  
+  .card-hover {
+    @apply transition-all duration-300 hover:shadow-strong hover:-translate-y-1;
+  }
+  
+  .btn-primary {
+    @apply bg-gradient-to-r from-primary-500 to-primary-600 text-white font-semibold py-3 px-6 rounded-xl shadow-medium hover:from-primary-600 hover:to-primary-700 hover:shadow-strong focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 transition-all duration-200;
+  }
+  
+  .btn-secondary {
+    @apply bg-white text-primary-600 border-2 border-primary-200 font-semibold py-3 px-6 rounded-xl hover:bg-primary-50 hover:border-primary-300 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 transition-all duration-200;
+  }
+}
+
+/* Professional Animations */
+@layer utilities {
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
+  }
+  
+  .animate-glow {
+    animation: glow 2s ease-in-out infinite alternate;
+  }
+  
+  @keyframes float {
+    0%, 100% {
+      transform: translateY(0px);
+    }
+    50% {
+      transform: translateY(-10px);
+    }
+  }
+  
+  @keyframes glow {
+    from {
+      box-shadow: 0 0 20px rgba(212, 175, 55, 0.3);
+    }
+    to {
+      box-shadow: 0 0 30px rgba(212, 175, 55, 0.6);
+    }
+  }
+  
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  
+  .text-shadow {
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+  
+  .text-shadow-lg {
+    text-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  }
+}

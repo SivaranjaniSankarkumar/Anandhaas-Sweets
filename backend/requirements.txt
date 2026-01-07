@@ -1,0 +1,8 @@
+flask==2.3.3
+flask-cors==4.0.0
+pandas==2.1.1
+matplotlib==3.7.2
+boto3==1.28.85
+requests==2.31.0
+python-dotenv==1.0.0
+slack-sdk==3.21.3
