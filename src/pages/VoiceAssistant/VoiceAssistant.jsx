@@ -1,5 +1,5 @@
 import sweetsBg from '../../assets/images/sweets-bg.webp';
-import { Mic, Send, Volume2, BarChart3, PieChart, TrendingUp, Download, MessageSquare, Clock, User, Bot, FileText, Share2, Eye, EyeOff, X } from 'lucide-react';
+import { Mic, Send, Volume2, BarChart3, PieChart, TrendingUp, Download, MessageSquare, Clock, User, Bot, FileText, Share2, Eye, EyeOff, X, Maximize2, Minimize2 } from 'lucide-react';
 import React, { useState, useRef, useEffect } from 'react';
 import { BarChart, Bar, PieChart as RechartsPieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useAuth } from '../../contexts/AuthContext';
@@ -305,12 +305,21 @@ export default function VoiceAssistant() {
     if (isDualMetrics) {
       return (
         <div className="mt-8 bg-gradient-to-br from-slate-50 to-white p-8 rounded-2xl shadow-2xl border border-slate-200">
-          <h3 className="font-bold text-xl text-slate-800 mb-6 flex items-center gap-3">
-            <div className="p-2 bg-blue-100 rounded-lg">
-              <BarChart3 className="w-6 h-6 text-blue-600" />
-            </div>
-            {title}
-          </h3>
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="font-bold text-xl text-slate-800 flex items-center gap-3">
+              <div className="p-2 bg-blue-100 rounded-lg">
+                <BarChart3 className="w-6 h-6 text-blue-600" />
+              </div>
+              {title}
+            </h3>
+            <button
+              onClick={() => setIsChartMaximized(true)}
+              className="p-2 hover:bg-slate-100 rounded-lg transition-colors group"
+              title="Maximize Chart"
+            >
+              <Maximize2 className="w-5 h-5 text-slate-600 group-hover:text-slate-800" />
+            </button>
+          </div>
           <div className="grid grid-cols-2 gap-8">
             <div>
               <h4 className="text-lg font-semibold text-slate-700 mb-4 text-center">Revenue Analysis</h4>
@@ -380,9 +389,18 @@ export default function VoiceAssistant() {
     if (chart_type === 'pie') {
       return (
         <div className="mt-6 bg-white p-4 rounded-xl shadow">
-          <h3 className="font-semibold text-gold mb-4 flex items-center gap-2">
-            <PieChart className="w-5 h-5" /> {title}
-          </h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-gold flex items-center gap-2">
+              <PieChart className="w-5 h-5" /> {title}
+            </h3>
+            <button
+              onClick={() => setIsChartMaximized(true)}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors group"
+              title="Maximize Chart"
+            >
+              <Maximize2 className="w-4 h-4 text-gray-600 group-hover:text-gray-800" />
+            </button>
+          </div>
           <ResponsiveContainer width="100%" height={300}>
             <RechartsPieChart>
               <Pie dataKey="value" data={data} cx="50%" cy="50%" outerRadius={80} label>
@@ -401,9 +419,18 @@ export default function VoiceAssistant() {
       const isRevenue = chartData.y_axis === 'Total Amount';
       return (
         <div className="mt-6 bg-white p-4 rounded-xl shadow">
-          <h3 className="font-semibold text-gold mb-4 flex items-center gap-2">
-            <TrendingUp className="w-5 h-5" /> {title}
-          </h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-gold flex items-center gap-2">
+              <TrendingUp className="w-5 h-5" /> {title}
+            </h3>
+            <button
+              onClick={() => setIsChartMaximized(true)}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors group"
+              title="Maximize Chart"
+            >
+              <Maximize2 className="w-4 h-4 text-gray-600 group-hover:text-gray-800" />
+            </button>
+          </div>
           <ResponsiveContainer width="100%" height={300}>
             <LineChart data={data}>
               <CartesianGrid strokeDasharray="3 3" />
@@ -420,9 +447,18 @@ export default function VoiceAssistant() {
     const isRevenue = chartData.y_axis === 'Total Amount';
     return (
       <div className="mt-6 bg-white p-4 rounded-xl shadow">
-        <h3 className="font-semibold text-gold mb-4 flex items-center gap-2">
-          <BarChart3 className="w-5 h-5" /> {title}
-        </h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold text-gold flex items-center gap-2">
+            <BarChart3 className="w-5 h-5" /> {title}
+          </h3>
+          <button
+            onClick={() => setIsChartMaximized(true)}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors group"
+            title="Maximize Chart"
+          >
+            <Maximize2 className="w-4 h-4 text-gray-600 group-hover:text-gray-800" />
+          </button>
+        </div>
         <ResponsiveContainer width="100%" height={300}>
           <BarChart data={data}>
             <CartesianGrid strokeDasharray="3 3" />
@@ -436,7 +472,187 @@ export default function VoiceAssistant() {
     );
   }
 
+  function renderMaximizedChart() {
+    if (!chartData || !chartData.data) return null;
+    
+    const { chart_type, data, title, dual_metrics } = chartData;
+    const isDualMetrics = dual_metrics || (data.length > 0 && data[0].hasOwnProperty('revenue') && data[0].hasOwnProperty('count'));
+    
+    if (isDualMetrics) {
+      return (
+        <div className="w-full h-full">
+          <div className="grid grid-cols-2 gap-8 h-full">
+            <div className="flex flex-col">
+              <h4 className="text-2xl font-bold text-slate-700 mb-6 text-center">Revenue Analysis</h4>
+              <div className="flex-1">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={data} margin={{ top: 20, right: 30, left: 40, bottom: 60 }}>
+                    <CartesianGrid strokeDasharray="2 2" stroke="#e2e8f0" strokeOpacity={0.5} />
+                    <XAxis 
+                      dataKey="name" 
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: '#64748b', fontSize: 14, fontWeight: 500 }}
+                      angle={-45}
+                      textAnchor="end"
+                      height={80}
+                    />
+                    <YAxis 
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: '#64748b', fontSize: 14, fontWeight: 500 }}
+                    />
+                    <Tooltip 
+                      contentStyle={{
+                        backgroundColor: '#1f2937',
+                        border: 'none',
+                        borderRadius: '12px',
+                        color: '#ffffff',
+                        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
+                        fontSize: '14px'
+                      }}
+                      formatter={(value) => [`₹${value.toLocaleString()}`, 'Revenue']}
+                    />
+                    <Bar dataKey="revenue" fill="#1e40af" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+            <div className="flex flex-col">
+              <h4 className="text-2xl font-bold text-slate-700 mb-6 text-center">Transaction Count</h4>
+              <div className="flex-1">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={data} margin={{ top: 20, right: 30, left: 40, bottom: 60 }}>
+                    <CartesianGrid strokeDasharray="2 2" stroke="#e2e8f0" strokeOpacity={0.5} />
+                    <XAxis 
+                      dataKey="name" 
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: '#64748b', fontSize: 14, fontWeight: 500 }}
+                      angle={-45}
+                      textAnchor="end"
+                      height={80}
+                    />
+                    <YAxis 
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: '#64748b', fontSize: 14, fontWeight: 500 }}
+                    />
+                    <Tooltip 
+                      contentStyle={{
+                        backgroundColor: '#1f2937',
+                        border: 'none',
+                        borderRadius: '12px',
+                        color: '#ffffff',
+                        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
+                        fontSize: '14px'
+                      }}
+                      formatter={(value) => [value, 'Count']}
+                    />
+                    <Bar dataKey="count" fill="#059669" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    
+    if (chart_type === 'pie') {
+      return (
+        <div className="w-full h-full flex items-center justify-center">
+          <ResponsiveContainer width="100%" height="100%">
+            <RechartsPieChart>
+              <Pie 
+                dataKey="value" 
+                data={data} 
+                cx="50%" 
+                cy="50%" 
+                outerRadius={200} 
+                label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(1)}%`}
+                labelLine={false}
+              >
+                {data.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip 
+                contentStyle={{
+                  backgroundColor: '#1f2937',
+                  border: 'none',
+                  borderRadius: '12px',
+                  color: '#ffffff',
+                  fontSize: '16px'
+                }}
+              />
+            </RechartsPieChart>
+          </ResponsiveContainer>
+        </div>
+      );
+    }
+    
+    if (chart_type === 'line') {
+      return (
+        <div className="w-full h-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={data} margin={{ top: 20, right: 30, left: 40, bottom: 60 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <XAxis 
+                dataKey="name" 
+                tick={{ fontSize: 14, fontWeight: 500 }}
+                angle={-45}
+                textAnchor="end"
+                height={80}
+              />
+              <YAxis tick={{ fontSize: 14, fontWeight: 500 }} />
+              <Tooltip 
+                contentStyle={{
+                  backgroundColor: '#1f2937',
+                  border: 'none',
+                  borderRadius: '12px',
+                  color: '#ffffff',
+                  fontSize: '16px'
+                }}
+              />
+              <Line type="monotone" dataKey="value" stroke="#2563eb" strokeWidth={4} dot={{ r: 6 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      );
+    }
+    
+    return (
+      <div className="w-full h-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data} margin={{ top: 20, right: 30, left: 40, bottom: 60 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+            <XAxis 
+              dataKey="name" 
+              tick={{ fontSize: 14, fontWeight: 500 }}
+              angle={-45}
+              textAnchor="end"
+              height={80}
+            />
+            <YAxis tick={{ fontSize: 14, fontWeight: 500 }} />
+            <Tooltip 
+              contentStyle={{
+                backgroundColor: '#1f2937',
+                border: 'none',
+                borderRadius: '12px',
+                color: '#ffffff',
+                fontSize: '16px'
+              }}
+            />
+            <Bar dataKey="value" fill="#2563eb" radius={[6, 6, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    );
+  }
+
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isChartMaximized, setIsChartMaximized] = useState(false);
 
   return (
     <div className="min-h-screen relative">
@@ -638,6 +854,27 @@ export default function VoiceAssistant() {
 
       </section>
       {renderChart()}
+      
+      {/* Maximized Chart Modal */}
+      {isChartMaximized && chartData && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full h-full max-w-7xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h2 className="text-2xl font-bold text-gray-800">{chartData.title}</h2>
+              <button
+                onClick={() => setIsChartMaximized(false)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors group"
+                title="Minimize Chart"
+              >
+                <Minimize2 className="w-6 h-6 text-gray-600 group-hover:text-gray-800" />
+              </button>
+            </div>
+            <div className="flex-1 p-6 overflow-auto">
+              {renderMaximizedChart()}
+            </div>
+          </div>
+        </div>
+      )}
         </div>
       </div>
     </div>

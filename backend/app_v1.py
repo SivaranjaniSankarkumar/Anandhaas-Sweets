@@ -180,12 +180,34 @@ Return ONLY valid JSON in this exact format:
   "month_filter": null or month_number or [month_numbers],
   "date_filter": null or "YYYY-MM-DD" or ["YYYY-MM-DD", "YYYY-MM-DD"],
   "year_filter": null or year_number or [year_numbers],
+  "limit": null or number,
   "title": "chart title",
   "dual_metrics": false or true
 }}
 
 CRITICAL RULES:
-- Extract ALL filters from the query: branches, sections, items, sales groups, months, dates, years
+- CRITICAL: TOP N QUERIES - Extract limit numbers from queries:
+  * "top 5", "top 10", "top 7", "first 5", "best 10" → extract as limit: 5, 10, 7, 5, 10
+  * "highest 3", "lowest 5", "bottom 10" → extract as limit: 3, 5, 10
+  * "show me 5", "give me 10", "list 7" → extract as limit: 5, 10, 7
+  * "Top 10 Roast Items" → extract as limit: 10
+  * "Top 5 branches" → extract as limit: 5
+  * ANY query with "top [NUMBER]" or "[NUMBER] top" → ALWAYS extract the NUMBER as limit
+  * When user specifies a number, ALWAYS extract it as limit
+  * If no number specified, set limit: null to show all results
+- CRITICAL: INTELLIGENT ITEM MATCHING RULES:
+  * When user asks for "Bombay Mixture" → use item_filters: ["bombay mixture"] to find ALL bombay mixture variations
+  * When user asks for "ALL Mysore Pak" or "all mysore pak items" → use item_filters: ["mysore pak"] to find ALL variations
+  * When user asks for "ALL Achu Murukku" → use item_filters: ["achu murukku"] to find ALL variations  
+  * When user asks for "Mysore Pak Special" → use item_filters: ["mysore pak special"] for specific item
+  * CRITICAL: EXACT ITEM MATCHING - Use the EXACT item name user mentions, don't substitute with similar items
+  * "Bombay Mixture" ≠ "Corn Mixture" - these are different items!
+  * "Achu Murukku" ≠ "Ribbon Pakoda" - these are different items!
+  * CRITICAL: When user says "ALL [ITEM_NAME]" → use single base filter ["item_name"] NOT multiple specific items
+  * GROUP SEARCH: Use base item name ("mysore pak", "achu murukku", "bombay mixture") to find all variations
+  * NEVER list specific items when user asks for "ALL" - always use base search term
+  * NEVER substitute or guess item names - use EXACTLY what user says
+  * Always prioritize showing ALL relevant items for revenue analysis unless user is very specific
 - For months: january=1, february=2, march=3, april=4, may=5, june=6, july=7, august=8, september=9, october=10, november=11, december=12
 - For dates: extract specific dates ("2024-08-19") or date ranges (["2024-08-19", "2024-08-20"])
 - For years: extract year numbers (2023, 2024, etc.)
@@ -197,7 +219,9 @@ CRITICAL RULES:
   * "SK branch" or "SK" → "SK"
   * Look for patterns like "X branch, Y branch" or "X and Y branches"
   * Parse comma-separated lists: "VV, SK, SBC" should extract all three branches
-- When user mentions "ecom", "e-commerce", "online" → use sales_group_filters: ["Sales - Ecom"] or ["Sales - Online"]
+- When user mentions "ecom", "e-commerce", "ecommerce" → use sales_group_filters: ["Sales - Ecom"] ONLY
+- When user mentions "online" → use sales_group_filters: ["Sales - Online"] ONLY
+- When user mentions "ecommerce alone" or "ecom alone" → use sales_group_filters: ["Sales - Ecom"] ONLY, NOT both ecom and online
 - When user mentions "offline", "store", "SAS" → use sales_group_filters: ["Sales - SAS"]
 - When user mentions "party order" → use sales_group_filters: ["Sales - Party Order"]
 - When user mentions "section wise" → use x_axis: "SK_Section"
@@ -214,9 +238,19 @@ CRITICAL RULES:
 - For time/trend with specific dates, use chart_type: "line" with x_axis: "Date"
 - For monthly analysis, ALWAYS use x_axis: "Month" and chart_type: "bar"
 - For daily analysis over short periods, use x_axis: "Date" and chart_type: "line"
-- CRITICAL: If user asks for BOTH revenue AND quantity (like "revenue and quantity", "both revenue and count"), set dual_metrics: true, chart_type: "dual_bar", y_axis: "dual"
-- CRITICAL: When user asks for comparison between different sales channels ("ecom and online", "ecom vs online"), set dual_metrics: true
-- CRITICAL: When user asks for comparison between different dates ("19th vs 20th August"), set dual_metrics: true, x_axis: "Date"
+- CRITICAL: DUAL METRICS DETECTION - Set dual_metrics: true when:
+  * User asks for "comparison" between different categories ("sweets vs kaaram", "revenue comparison for sweets and kaaram")
+  * User mentions "compare", "comparison", "vs", "versus", "and" between different groups
+  * User asks for multiple item groups ("sweets and kaaram", "bakery and mixture")
+  * User asks for multiple branches ("VV and SK revenue", "compare VV vs SK")
+  * User asks for multiple sections ("boli section vs milk section")
+  * User asks for multiple sales groups ("ecom vs online", "ecom and sas comparison")
+  * User asks for multiple dates ("19th vs 20th August", "july vs august")
+  * User asks for multiple months ("january vs february", "compare jan and feb")
+  * CRITICAL: When user says "revenue comparison for X and Y" → set dual_metrics: true, x_axis based on category type
+  * For item group comparison → set x_axis: "Item Group Name"
+  * For branch comparison → set x_axis: "Branch_Name"
+  * For section comparison → set x_axis: "SK_Section"
 - CRITICAL: Date filtering rules:
   * "today", "yesterday" → extract current/previous date
   * "19th August", "Aug 19", "August 19th" → extract as "2024-08-19" (assume current year if not specified)
@@ -237,6 +271,9 @@ CRITICAL RULES:
         result = json.loads(raw)
         ai_text = result["output"]["message"]["content"][0]["text"].strip()
 
+        # Debug: Show what AI returned
+        print(f"DEBUG: AI Response: {ai_text}")
+
         if "{" in ai_text and "}" in ai_text:
             start = ai_text.find("{")
             end = ai_text.rfind("}") + 1
@@ -252,6 +289,7 @@ CRITICAL RULES:
         plan.setdefault("aggregation", "sum")
         plan.setdefault("title", "Sweets Sales Analysis")
         plan.setdefault("dual_metrics", False)
+        plan.setdefault("limit", None)
 
         # Build filters dynamically like restaurant dashboard
         filters = []
@@ -313,6 +351,7 @@ CRITICAL RULES:
         print(f"Query: {query}")
         print(f"AI Generated Plan: {plan}")
         print(f"Extracted Filters: {plan.get('filters', [])}")
+        print(f"LIMIT EXTRACTED: {plan.get('limit')}")
         print(f"========================\n")
         return plan
 
@@ -351,27 +390,34 @@ def apply_dynamic_filters(data: pd.DataFrame, filters: list) -> pd.DataFrame:
             year_list = [int(y) for y in filter_value]
             filtered_data = filtered_data[filtered_data["Date"].dt.year.isin(year_list)]
         elif filter_type in ["Branch_Name", "SK_Section", "Item_Service_Description", "Item Group Name", "Sales Group Name"]:
-            clean_data = filtered_data.dropna(subset=[filter_type])
             filter_value_str = str(filter_value).lower().strip()
             
-            # First try exact match
-            exact_match = clean_data[clean_data[filter_type].astype(str).str.lower().str.strip() == filter_value_str]
-            
-            if not exact_match.empty:
-                filtered_data = exact_match
-            else:
-                # Use word boundary matching for better precision
-                pattern = r'\b' + filter_value_str.replace(' ', r'\s+') + r'\b'
-                mask = clean_data[filter_type].astype(str).str.contains(pattern, case=False, na=False, regex=True)
-                tmp = clean_data[mask]
+            # For Item_Service_Description, always use contains matching to find variations
+            if filter_type == "Item_Service_Description":
+                # Use contains matching for group searches
+                mask = filtered_data[filter_type].astype(str).str.contains(filter_value_str, case=False, na=False)
+                filtered_data = filtered_data[mask]
                 
-                if tmp.empty:
-                    # Fallback to simple contains if word boundary fails
-                    mask = clean_data[filter_type].astype(str).str.contains(filter_value_str, case=False, na=False)
-                    tmp = clean_data[mask]
+                # Debug: Show what items were matched
+                if not filtered_data.empty:
+                    matched_items = filtered_data[filter_type].astype(str).unique()
+                    print(f"DEBUG: Items matched for '{filter_value_str}': {sorted(matched_items)}")
+                    total_revenue = filtered_data['Row_Total'].sum()
+                    print(f"DEBUG: Total revenue: ₹{total_revenue:,.2f}")
                 
-                filtered_data = tmp
                 print(f"DEBUG: Filter '{filter_type}={filter_value}' resulted in {len(filtered_data)} records")
+            else:
+                # For other columns, try exact match first
+                exact_match = filtered_data[filtered_data[filter_type].astype(str).str.lower().str.strip() == filter_value_str]
+                
+                if not exact_match.empty:
+                    filtered_data = exact_match
+                    print(f"DEBUG: Found exact match for '{filter_value_str}': {len(exact_match)} records")
+                else:
+                    # Use contains matching for partial searches
+                    mask = filtered_data[filter_type].astype(str).str.contains(filter_value_str, case=False, na=False)
+                    filtered_data = filtered_data[mask]
+                    print(f"DEBUG: Filter '{filter_type}={filter_value}' resulted in {len(filtered_data)} records")
         elif filter_type in ["Branch_in", "Section_in", "Item_in", "Item_Group_in", "Sales_Group_in"]:
             col_map = {
                 "Branch_in": "Branch_Name",
@@ -382,14 +428,38 @@ def apply_dynamic_filters(data: pd.DataFrame, filters: list) -> pd.DataFrame:
             }
             col = col_map[filter_type]
             if col in filtered_data.columns:
-                values = [str(v) for v in filter_value]
-                clean_data = filtered_data.dropna(subset=[col])
-                filtered_data = clean_data[clean_data[col].astype(str).isin(values)]
+                # For Item_in, use contains matching to find all variations
+                if filter_type == "Item_in":
+                    all_matches = pd.DataFrame()
+                    for search_term in filter_value:
+                        search_term_lower = str(search_term).lower().strip()
+                        # Use contains matching to find all variations
+                        mask = filtered_data[col].astype(str).str.contains(search_term_lower, case=False, na=False)
+                        matches = filtered_data[mask]
+                        all_matches = pd.concat([all_matches, matches], ignore_index=True)
+                        
+                        if not matches.empty:
+                            matched_items = matches[col].astype(str).unique()
+                            print(f"DEBUG: Found items for '{search_term}': {sorted(matched_items)}")
+                    
+                    filtered_data = all_matches.drop_duplicates()
+                    print(f"DEBUG: Total items after Item_in filter: {len(filtered_data)} records")
+                else:
+                    # For other filters, use exact match
+                    values = [str(v) for v in filter_value]
+                    clean_data = filtered_data.dropna(subset=[col])
+                    filtered_data = clean_data[clean_data[col].astype(str).isin(values)]
+    
+    if filtered_data.empty:
+        print(f"DEBUG: Applied filters: {filters}")
+        print(f"DEBUG: Original data shape: {data.shape}")
+        raise ValueError(f"No data found after applying filters. Check filter values against available data.")
     
     return filtered_data
 
 def create_anandhaas_visualization(data: pd.DataFrame, ai_plan: dict):
-    dual_metrics = ai_plan.get("dual_metrics", False)
+    dual_metrics = ai_plan.get("dual_metrics", False) or ai_plan.get("y_axis") == "dual"
+    comparison_type = ai_plan.get("comparison_type", "metric")
     
     if dual_metrics:
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(24, 10))
@@ -399,7 +469,7 @@ def create_anandhaas_visualization(data: pd.DataFrame, ai_plan: dict):
     # Apply AI-driven dynamic filters
     filtered_data = apply_dynamic_filters(data, ai_plan.get("filters", []))
 
-    if filtered_data.empty:
+    if filtered_data is None or filtered_data.empty:
         raise ValueError("No data found after applying filters.")
 
     x_col = ai_plan.get("x_axis", "Branch_Name")
@@ -410,237 +480,156 @@ def create_anandhaas_visualization(data: pd.DataFrame, ai_plan: dict):
         filtered_data["MonthSort"] = filtered_data["Date"].dt.to_period("M")
     
     if dual_metrics:
-        # Fully dynamic dual metrics - determine from AI plan what to compare
-        y_axis = ai_plan.get("y_axis", "Row_Total")
+        x_col = ai_plan.get("x_axis", "Branch_Name")
+        y_col_1 = ai_plan.get("y_axis", "Row_Total")
+        y_col_2 = ai_plan.get("y_axis_secondary", "Quantity_Inventory_UoM")
+        agg_1 = ai_plan.get("aggregation", "sum")
+        agg_2 = ai_plan.get("aggregation_secondary", "sum")
+        limit = ai_plan.get("limit")
         
-        # Determine the metric column and aggregation
-        if y_axis == "count":
-            metric_col = "count"
-            agg_func = "size"
-            format_func = lambda x: f'{x:.0f}'
-            ylabel = "Count"
-        elif y_axis == "Quantity_Inventory_UoM":
-            metric_col = "Quantity_Inventory_UoM"
-            agg_func = "sum"
-            # Get common UoM for formatting
-            common_uom = filtered_data["Inventory_UoM"].mode().iloc[0] if not filtered_data["Inventory_UoM"].mode().empty else "Units"
-            format_func = lambda x: f'{x:.0f} {common_uom}'
-            ylabel = f"Quantity ({common_uom})"
-        else:
-            metric_col = "Row_Total"
-            agg_func = "sum"
-            format_func = lambda x: f'₹{x:,.0f}'
-            ylabel = "Revenue (₹)"
-        
-        # Check if we have sales group filters to determine split logic
-        sales_filters = [f for f in ai_plan.get("filters", []) if "Sales_Group" in f[0]]
-        
-        if sales_filters and len(sales_filters[0][1]) >= 2:
-            # Split by the sales groups specified in filters
-            group_values = sales_filters[0][1]
+        if comparison_type == "monthly" and ai_plan.get("month_filter"):
+            # Month comparison logic
+            month_list = [int(m) for m in ai_plan.get("month_filter", [])]
+            month_names = {1: "January", 2: "February", 3: "March", 4: "April", 5: "May", 6: "June",
+                          7: "July", 8: "August", 9: "September", 10: "October", 11: "November", 12: "December"}
             
-            # First group data
-            group1_data = filtered_data[filtered_data["Sales Group Name"].isin([group_values[0]])]
-            group1_name = group_values[0].replace("Sales - ", "")
-            
-            # Second group data  
-            group2_data = filtered_data[filtered_data["Sales Group Name"].isin([group_values[1]])]
-            group2_name = group_values[1].replace("Sales - ", "")
-            
-            print(f"{group1_name} data: {len(group1_data)} records")
-            print(f"{group2_name} data: {len(group2_data)} records")
-            
-            # Process first group
-            if not group1_data.empty:
-                if agg_func == "size":
-                    group1_grouped = group1_data.groupby(x_col).size().sort_values(ascending=False)
-                else:
-                    group1_grouped = group1_data.groupby(x_col)[metric_col].agg(agg_func).sort_values(ascending=False)
-                
-                bars1 = ax1.bar(range(len(group1_grouped)), group1_grouped.values, color='#1e40af', alpha=0.95)
-                ax1.set_xticks(range(len(group1_grouped)))
-                ax1.set_xticklabels(group1_grouped.index, rotation=45, ha='right', fontsize=11)
-                ax1.set_xlabel(x_col, fontsize=12, fontweight="bold")
-                ax1.set_ylabel(ylabel, fontsize=12, fontweight="bold")
-                ax1.set_title(f"{group1_name} Sales", fontsize=14, fontweight="bold")
-                
-                for i, bar in enumerate(bars1):
-                    height = bar.get_height()
-                    ax1.text(bar.get_x() + bar.get_width()/2., height + height*0.01, format_func(height),
-                            ha='center', va='bottom', fontweight='bold', fontsize=9)
-            
-            # Process second group
-            if not group2_data.empty:
-                if agg_func == "size":
-                    group2_grouped = group2_data.groupby(x_col).size().sort_values(ascending=False)
-                else:
-                    group2_grouped = group2_data.groupby(x_col)[metric_col].agg(agg_func).sort_values(ascending=False)
-                
-                bars2 = ax2.bar(range(len(group2_grouped)), group2_grouped.values, color='#059669', alpha=0.95)
-                ax2.set_xticks(range(len(group2_grouped)))
-                ax2.set_xticklabels(group2_grouped.index, rotation=45, ha='right', fontsize=11)
-                ax2.set_xlabel(x_col, fontsize=12, fontweight="bold")
-                ax2.set_ylabel(ylabel, fontsize=12, fontweight="bold")
-                ax2.set_title(f"{group2_name} Sales", fontsize=14, fontweight="bold")
-                
-                for i, bar in enumerate(bars2):
-                    height = bar.get_height()
-                    ax2.text(bar.get_x() + bar.get_width()/2., height + height*0.01, format_func(height),
-                            ha='center', va='bottom', fontweight='bold', fontsize=9)
-            
-            # Prepare chart data
-            chart_data = []
-            all_keys = set(group1_grouped.index if 'group1_grouped' in locals() else []) | set(group2_grouped.index if 'group2_grouped' in locals() else [])
-            for key in all_keys:
-                chart_data.append({
-                    "name": str(key),
-                    "revenue": float(group1_grouped.get(key, 0) if 'group1_grouped' in locals() else 0),
-                    "count": float(group2_grouped.get(key, 0) if 'group2_grouped' in locals() else 0)
-                })
-            chart_data.sort(key=lambda x: x["revenue"] + x["count"], reverse=True)
-            
-        else:
-            # Dynamic dual comparison based on query content
-            query_lower = ai_plan.get("title", "").lower()
-            
-            # Check for quantity and revenue comparison
-            if ("quantity" in query_lower and "revenue" in query_lower) or y_axis == "dual":
-                # Quantity vs Revenue comparison for the same data
-                # Chart 1: Revenue
-                revenue_data = filtered_data.groupby(x_col)["Row_Total"].sum().sort_values(ascending=False)
-                bars1 = ax1.bar(range(len(revenue_data)), revenue_data.values, color='#1e40af', alpha=0.95)
-                ax1.set_xticks(range(len(revenue_data)))
-                ax1.set_xticklabels(revenue_data.index, rotation=45, ha='right', fontsize=11)
-                ax1.set_xlabel(x_col, fontsize=12, fontweight="bold")
-                ax1.set_ylabel("Revenue (₹)", fontsize=12, fontweight="bold")
-                ax1.set_title("Revenue", fontsize=14, fontweight="bold")
-                
-                for i, bar in enumerate(bars1):
-                    height = bar.get_height()
-                    ax1.text(bar.get_x() + bar.get_width()/2., height + height*0.01, f'₹{height:,.0f}',
-                            ha='center', va='bottom', fontweight='bold', fontsize=9)
-                
-                # Chart 2: Quantity with UoM
-                quantity_data = filtered_data.groupby(x_col)["Quantity_Inventory_UoM"].sum().sort_values(ascending=False)
-                
-                # Get the most common UoM for this item
-                common_uom = filtered_data["Inventory_UoM"].mode().iloc[0] if not filtered_data["Inventory_UoM"].mode().empty else "Units"
-                
-                bars2 = ax2.bar(range(len(quantity_data)), quantity_data.values, color='#059669', alpha=0.95)
-                ax2.set_xticks(range(len(quantity_data)))
-                ax2.set_xticklabels(quantity_data.index, rotation=45, ha='right', fontsize=11)
-                ax2.set_xlabel(x_col, fontsize=12, fontweight="bold")
-                ax2.set_ylabel(f"Quantity ({common_uom})", fontsize=12, fontweight="bold")
-                ax2.set_title(f"Quantity ({common_uom})", fontsize=14, fontweight="bold")
-                
-                for i, bar in enumerate(bars2):
-                    height = bar.get_height()
-                    ax2.text(bar.get_x() + bar.get_width()/2., height + height*0.01, f'{height:,.0f} {common_uom}',
-                            ha='center', va='bottom', fontweight='bold', fontsize=9)
-                
-                # Prepare chart data
-                chart_data = []
-                all_keys = set(revenue_data.index) | set(quantity_data.index)
-                for key in all_keys:
-                    chart_data.append({
-                        "name": str(key),
-                        "revenue": float(revenue_data.get(key, 0)),
-                        "count": float(quantity_data.get(key, 0))
-                    })
-                chart_data.sort(key=lambda x: x["revenue"] + x["count"], reverse=True)
-            
-            elif "sales group" in query_lower and "item group" in query_lower:
-                # Sales Group vs Item Group
-                if agg_func == "size":
-                    group1_data = filtered_data.groupby("Sales Group Name").size().sort_values(ascending=False)
-                    group2_data = filtered_data.groupby("Item Group Name").size().sort_values(ascending=False)
-                else:
-                    group1_data = filtered_data.groupby("Sales Group Name")[metric_col].agg(agg_func).sort_values(ascending=False)
-                    group2_data = filtered_data.groupby("Item Group Name")[metric_col].agg(agg_func).sort_values(ascending=False)
-                
-                # Chart 1: Sales Group
-                bars1 = ax1.bar(range(len(group1_data)), group1_data.values, color='#1e40af', alpha=0.95)
-                ax1.set_xticks(range(len(group1_data)))
-                ax1.set_xticklabels(group1_data.index, rotation=45, ha='right', fontsize=11)
-                ax1.set_xlabel("Sales Group Name", fontsize=12, fontweight="bold")
-                ax1.set_ylabel(ylabel, fontsize=12, fontweight="bold")
-                ax1.set_title(f"Sales Group {ylabel.split('(')[0].strip()}", fontsize=14, fontweight="bold")
-                
-                for i, bar in enumerate(bars1):
-                    height = bar.get_height()
-                    ax1.text(bar.get_x() + bar.get_width()/2., height + height*0.01, format_func(height),
-                            ha='center', va='bottom', fontweight='bold', fontsize=9)
-                
-                # Chart 2: Item Group
-                bars2 = ax2.bar(range(len(group2_data)), group2_data.values, color='#059669', alpha=0.95)
-                ax2.set_xticks(range(len(group2_data)))
-                ax2.set_xticklabels(group2_data.index, rotation=45, ha='right', fontsize=11)
-                ax2.set_xlabel("Item Group Name", fontsize=12, fontweight="bold")
-                ax2.set_ylabel(ylabel, fontsize=12, fontweight="bold")
-                ax2.set_title(f"Item Group {ylabel.split('(')[0].strip()}", fontsize=14, fontweight="bold")
-                
-                for i, bar in enumerate(bars2):
-                    height = bar.get_height()
-                    ax2.text(bar.get_x() + bar.get_width()/2., height + height*0.01, format_func(height),
-                            ha='center', va='bottom', fontweight='bold', fontsize=9)
-                
-                # Prepare chart data
-                chart_data = []
-                for name, value in group1_data.items():
-                    chart_data.append({"name": f"SG: {name}", "revenue": float(value), "count": 0})
-                for name, value in group2_data.items():
-                    chart_data.append({"name": f"IG: {name}", "revenue": 0, "count": float(value)})
-                chart_data.sort(key=lambda x: x["revenue"] + x["count"], reverse=True)
-            
+            # Get top items first
+            if y_col_1 == "count":
+                top_items = filtered_data.groupby(x_col).size().sort_values(ascending=False)
             else:
-                # Default fallback - split all data into two equal parts or by first available grouping
-                available_groups = filtered_data["Sales Group Name"].unique()
-                if len(available_groups) >= 2:
-                    group1_data = filtered_data[filtered_data["Sales Group Name"] == available_groups[0]]
-                    group2_data = filtered_data[filtered_data["Sales Group Name"] == available_groups[1]]
-                    group1_name = available_groups[0].replace("Sales - ", "")
-                    group2_name = available_groups[1].replace("Sales - ", "")
+                top_items = filtered_data.groupby(x_col)[y_col_1].agg(agg_1).sort_values(ascending=False)
+            
+            if limit and isinstance(limit, int) and limit > 0:
+                top_items = top_items.head(limit)
+            
+            filtered_data = filtered_data[filtered_data[x_col].isin(top_items.index)]
+            
+            # Create data for each month
+            metric1_data = {}
+            for month in month_list:
+                month_data = filtered_data[filtered_data["Date"].dt.month == month]
+                if y_col_1 == "count":
+                    month_metric = month_data.groupby(x_col).size()
                 else:
-                    # Split by branches if no sales groups
-                    available_branches = filtered_data["Branch_Name"].unique()
-                    if len(available_branches) >= 2:
-                        group1_data = filtered_data[filtered_data["Branch_Name"] == available_branches[0]]
-                        group2_data = filtered_data[filtered_data["Branch_Name"] == available_branches[1]]
-                        group1_name = available_branches[0]
-                        group2_name = available_branches[1]
-                    else:
-                        # Fallback to half split
-                        mid = len(filtered_data) // 2
-                        group1_data = filtered_data.iloc[:mid]
-                        group2_data = filtered_data.iloc[mid:]
-                        group1_name = "Group 1"
-                        group2_name = "Group 2"
+                    month_metric = month_data.groupby(x_col)[y_col_1].agg(agg_1)
+                metric1_data[month_names.get(month, f"Month {month}")] = month_metric.reindex(top_items.index, fill_value=0)
+            
+            # Create side-by-side bars
+            items = list(top_items.index)
+            x_pos = range(len(items))
+            width = 0.35
+            months = list(metric1_data.keys())
+            colors = ['#1e40af', '#059669', '#d97706', '#dc2626']
+            
+            for i, month in enumerate(months):
+                values = [metric1_data[month].get(item, 0) for item in items]
+                bars = ax1.bar([x + width*i for x in x_pos], values, width, 
+                              label=month, color=colors[i % len(colors)], alpha=0.95, edgecolor='white', linewidth=1.5)
                 
-                # Process groups dynamically
-                for i, (group_data, group_name, ax_chart, color) in enumerate([
-                    (group1_data, group1_name, ax1, '#1e40af'),
-                    (group2_data, group2_name, ax2, '#059669')
-                ]):
-                    if not group_data.empty:
-                        if agg_func == "size":
-                            grouped = group_data.groupby(x_col).size().sort_values(ascending=False)
-                        else:
-                            grouped = group_data.groupby(x_col)[metric_col].agg(agg_func).sort_values(ascending=False)
-                        
-                        bars = ax_chart.bar(range(len(grouped)), grouped.values, color=color, alpha=0.95)
-                        ax_chart.set_xticks(range(len(grouped)))
-                        ax_chart.set_xticklabels(grouped.index, rotation=45, ha='right', fontsize=11)
-                        ax_chart.set_xlabel(x_col, fontsize=12, fontweight="bold")
-                        ax_chart.set_ylabel(ylabel, fontsize=12, fontweight="bold")
-                        ax_chart.set_title(f"{group_name} Sales", fontsize=14, fontweight="bold")
-                        
-                        for j, bar in enumerate(bars):
-                            height = bar.get_height()
-                            ax_chart.text(bar.get_x() + bar.get_width()/2., height + height*0.01, format_func(height),
-                                    ha='center', va='bottom', fontweight='bold', fontsize=9)
+                for bar in bars:
+                    height = bar.get_height()
+                    label = f'₹{height:,.0f}' if y_col_1 == 'Row_Total' else f'{height:.0f}'
+                    ax1.text(bar.get_x() + bar.get_width()/2., height + height*0.01, 
+                            label, ha='center', va='bottom', fontweight='bold', fontsize=8)
+            
+            ax1.set_xticks([x + width/2 for x in x_pos])
+            ax1.set_xticklabels(items, rotation=45, ha='right', fontsize=10)
+            ax1.set_xlabel(x_col, fontsize=12, fontweight="bold")
+            ax1.set_ylabel(f"{y_col_1} ({agg_1})", fontsize=12, fontweight="bold")
+            ax1.set_title(f"{' vs '.join(months)} {y_col_1} Comparison", fontsize=14, fontweight="bold")
+            ax1.legend()
+            
+            # Second chart shows percentage comparison
+            total_by_item = {item: sum(metric1_data[month].get(item, 0) for month in months) for item in items}
+            percentages = {}
+            for month in months:
+                percentages[month] = [(metric1_data[month].get(item, 0) / total_by_item[item] * 100) if total_by_item[item] > 0 else 0 for item in items]
+            
+            for i, month in enumerate(months):
+                bars = ax2.bar([x + width*i for x in x_pos], percentages[month], width, 
+                              label=month, color=colors[i % len(colors)], alpha=0.95)
                 
-                # Prepare chart data
-                chart_data = [{"name": "Dynamic Comparison", "revenue": 0, "count": 0}]
+                for j, bar in enumerate(bars):
+                    height = bar.get_height()
+                    ax2.text(bar.get_x() + bar.get_width()/2., height + 1, f'{height:.1f}%',
+                            ha='center', va='bottom', fontweight='bold', fontsize=8)
+            
+            ax2.set_xticks([x + width/2 for x in x_pos])
+            ax2.set_xticklabels(items, rotation=45, ha='right', fontsize=10)
+            ax2.set_xlabel(x_col, fontsize=12, fontweight="bold")
+            ax2.set_ylabel("Percentage Share", fontsize=12, fontweight="bold")
+            ax2.set_title("Percentage Share Comparison", fontsize=14, fontweight="bold")
+            ax2.legend()
+            
+            chart_data = []
+            for item in items:
+                item_data = {"name": str(item)}
+                for month in months:
+                    item_data[month.lower()] = float(metric1_data[month].get(item, 0))
+                chart_data.append(item_data)
+        
+        else:
+            # Regular dual metrics (two different metrics)
+            if y_col_1 == "count":
+                metric1_data = filtered_data.groupby(x_col).size().sort_values(ascending=False)
+            else:
+                metric1_data = filtered_data.groupby(x_col)[y_col_1].agg(agg_1).sort_values(ascending=False)
+            
+            if limit and isinstance(limit, int) and limit > 0:
+                metric1_data = metric1_data.head(limit)
+            
+            if y_col_2 == "count":
+                metric2_data = filtered_data.groupby(x_col).size().reindex(metric1_data.index, fill_value=0)
+            else:
+                metric2_data = filtered_data.groupby(x_col)[y_col_2].agg(agg_2).reindex(metric1_data.index, fill_value=0)
+            
+            # First metric chart
+            bars1 = ax1.bar(range(len(metric1_data)), metric1_data.values, color='#1e40af', alpha=0.95, edgecolor='white', linewidth=1.5)
+            ax1.set_xticks(range(len(metric1_data)))
+            ax1.set_xticklabels(metric1_data.index, rotation=0 if len(metric1_data) <= 5 else 45, ha='center' if len(metric1_data) <= 5 else 'right', fontsize=11)
+            ax1.set_xlabel(x_col, fontsize=12, fontweight="bold")
+            ax1.set_ylabel(f"{y_col_1} ({agg_1})", fontsize=12, fontweight="bold")
+            ax1.set_title(f"{y_col_1} Analysis", fontsize=14, fontweight="bold")
+            
+            for i, bar in enumerate(bars1):
+                height = bar.get_height()
+                if y_col_1 == 'Row_Total':
+                    label = f'₹{height:,.0f}'
+                elif y_col_1 == 'Quantity_Inventory_UoM':
+                    common_uom = filtered_data["Inventory_UoM"].mode().iloc[0] if not filtered_data["Inventory_UoM"].mode().empty else "Units"
+                    label = f'{height:.1f} {common_uom}'  # Show 1 decimal place
+                else:
+                    label = f'{height:.0f}'
+                ax1.text(bar.get_x() + bar.get_width()/2., height + height*0.01, label,
+                        ha='center', va='bottom', fontweight='bold', fontsize=9)
+            
+            # Second metric chart
+            bars2 = ax2.bar(range(len(metric2_data)), metric2_data.values, color='#059669', alpha=0.95, edgecolor='white', linewidth=1.5)
+            ax2.set_xticks(range(len(metric2_data)))
+            ax2.set_xticklabels(metric2_data.index, rotation=0 if len(metric2_data) <= 5 else 45, ha='center' if len(metric2_data) <= 5 else 'right', fontsize=11)
+            ax2.set_xlabel(x_col, fontsize=12, fontweight="bold")
+            ax2.set_ylabel(f"{y_col_2} ({agg_2})", fontsize=12, fontweight="bold")
+            ax2.set_title(f"{y_col_2} Analysis", fontsize=14, fontweight="bold")
+            
+            for i, bar in enumerate(bars2):
+                height = bar.get_height()
+                if y_col_2 == 'Row_Total':
+                    label = f'₹{height:,.0f}'
+                elif y_col_2 == 'Quantity_Inventory_UoM':
+                    common_uom = filtered_data["Inventory_UoM"].mode().iloc[0] if not filtered_data["Inventory_UoM"].mode().empty else "Units"
+                    label = f'{height:.1f} {common_uom}'  # Show 1 decimal place
+                else:
+                    label = f'{height:.0f}'
+                ax2.text(bar.get_x() + bar.get_width()/2., height + height*0.01, label,
+                        ha='center', va='bottom', fontweight='bold', fontsize=9)
+            
+            chart_data = []
+            for item in metric1_data.index:
+                chart_data.append({
+                    "name": str(item),
+                    "revenue": float(metric1_data.get(item, 0)),
+                    "count": float(metric2_data.get(item, 0))
+                })
         
     else:
         # Single metric visualization
@@ -659,6 +648,17 @@ def create_anandhaas_visualization(data: pd.DataFrame, ai_plan: dict):
                 grouped_data = grouped_data.set_index("Month")[y_col].sort_index()
             else:
                 grouped_data = filtered_data.groupby(x_col)[y_col].agg(agg_method).sort_values(ascending=False)
+
+        # Apply limit if specified
+        limit = ai_plan.get("limit")
+        print(f"DEBUG: Single metric path - limit value: {limit}")
+        print(f"DEBUG: Grouped data length before limit: {len(grouped_data)}")
+        if limit and isinstance(limit, int) and limit > 0:
+            grouped_data = grouped_data.head(limit)
+            print(f"Applied limit: showing top {limit} results")
+            print(f"DEBUG: Grouped data length after limit: {len(grouped_data)}")
+        else:
+            print(f"DEBUG: No limit applied - showing all {len(grouped_data)} results")
 
         chart_type = ai_plan.get("chart_type", "bar")
 
@@ -705,9 +705,12 @@ def create_anandhaas_visualization(data: pd.DataFrame, ai_plan: dict):
                 if y_col == "Row_Total":
                     label = f"₹{height:,.0f}"
                 elif y_col == "Quantity_Inventory_UoM":
-                    # Get common UoM for this data
-                    common_uom = filtered_data["Inventory_UoM"].mode().iloc[0] if not filtered_data["Inventory_UoM"].mode().empty else "Units"
-                    label = f"{height:,.0f} {common_uom}"
+                    # Get the most common UoM for this data
+                    if not filtered_data.empty and "Inventory_UoM" in filtered_data.columns:
+                        common_uom = filtered_data["Inventory_UoM"].mode().iloc[0] if not filtered_data["Inventory_UoM"].mode().empty else "Units"
+                        label = f"{height:,.1f} {common_uom}"  # Show 1 decimal place for precision
+                    else:
+                        label = f"{height:,.1f} Units"  # Show 1 decimal place for precision
                 else:
                     label = f"{height:.0f}"
                 ax.text(bar.get_x() + bar.get_width() / 2.0, height + height*0.01, label,
@@ -845,19 +848,8 @@ def transcribe():
 def generate_pdf_report(fig, title, insights):
     with io.BytesIO() as pdf_buffer:
         with PdfPages(pdf_buffer) as pdf:
+            # Save only the chart - no separate insights page
             pdf.savefig(fig, bbox_inches="tight", dpi=150)
-            fig_text, ax_text = plt.subplots(figsize=(6, 4))
-            ax_text.text(0.05, 0.95, title, fontsize=12, fontweight="bold", transform=ax_text.transAxes)
-            ax_text.text(0.05, 0.85, "Key Insights:", fontsize=10, fontweight="bold", transform=ax_text.transAxes)
-            insight_lines = insights.replace(". ", ".\n").split("\n")
-            y_pos = 0.75
-            for line in insight_lines[:10]:
-                if line.strip():
-                    ax_text.text(0.05, y_pos, line.strip(), fontsize=9, transform=ax_text.transAxes, wrap=True)
-                    y_pos -= 0.08
-            ax_text.axis("off")
-            pdf.savefig(fig_text, bbox_inches="tight", dpi=150)
-            plt.close(fig_text)
         pdf_buffer.seek(0)
         return pdf_buffer.read()
 
